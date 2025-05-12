@@ -1,5 +1,6 @@
 import hashlib
 
+
 def H(x):
     return hashlib.sha256(x).digest()
 
@@ -10,6 +11,9 @@ class Mersplit_indexleTree:
     def insert(self, data):
         # store string as bytes
         self.leaves.append(data.encode())
+        
+    def get_leafs_cnt(self):
+        return len(self.leaves)
 
     def _root_range(self, l, h):
         length = h - l
@@ -80,11 +84,22 @@ def main():
                 data = parts[1]
                 tree.insert(data)
             elif cmd == '2':
+                # check input is valid
+                if len(parts) != 1:
+                    print()
+                    continue
                 # print root hash
                 print(tree.root().hex())
             elif cmd == '3':
+                # check input is valid
+                if len(parts) != 2:
+                    print()
+                    continue
                 # print root and proof
                 idx = int(parts[1])
+                if idx < 0 or idx >= tree.get_leafs_cnt():
+                    print()
+                    continue
                 root_hex = tree.root().hex()
                 proof = tree.get_proof(idx, 0, len(tree.leaves))
                 print(root_hex + ' ' + ' '.join(proof))
