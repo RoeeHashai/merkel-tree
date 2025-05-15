@@ -49,10 +49,15 @@ def verify_signature(pk_pem_str, sig_hex, data):
 class Mersplit_indexleTree:
     def __init__(self):
         self.leaves = []
+        self.root_hash = b''
 
     def insert(self, data):
         # store string as bytes
         self.leaves.append(data.encode())
+        self.root_hash = self._root_range(0, len(self.leaves))
+        
+    def get_root(self):
+        return self.root_hash
         
     def get_leafs_cnt(self):
         return len(self.leaves)
@@ -114,7 +119,7 @@ class Mersplit_indexleTree:
             backend=default_backend()
         )
         sig = sk.sign(
-            self.root(),
+            self.get_root(),
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
                 salt_length=padding.PSS.MAX_LENGTH
@@ -146,7 +151,7 @@ def main():
                     print()
                     continue
                 # print root hash
-                print(tree.root().hex())
+                print(tree.get_root().hex())
             elif cmd == '3':
                 # check input is valid
                 if len(parts) != 2:
@@ -157,7 +162,7 @@ def main():
                 if idx < 0 or idx >= tree.get_leafs_cnt():
                     print()
                     continue
-                root_hex = tree.root().hex()
+                root_hex = tree.get_root().hex()
                 proof = tree.get_proof(idx, 0, len(tree.leaves))
                 print(root_hex + ' ' + ' '.join(proof))
             elif cmd == '4':
