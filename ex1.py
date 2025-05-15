@@ -74,11 +74,6 @@ class Mersplit_indexleTree:
         right_hash = self._root_range(m, h)
         return H((left_hash.hex() + right_hash.hex()).encode())
 
-    def root(self):
-        if not self.leaves:
-            return b''
-        return self._root_range(0, len(self.leaves))
-
     def get_proof(self, index, l, h):
         length = h - l
         # base case: reached the leaf
