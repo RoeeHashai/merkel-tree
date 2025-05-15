@@ -4,6 +4,23 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 
+# Constants
+RSA_PRIVATE_KEY = "RSA PRIVATE KEY"
+RSA_PUBLIC_KEY = "PUBLIC KEY"
+BEGIN_PRIVATE_KEY = f"-----BEGIN {RSA_PRIVATE_KEY}-----"
+END_PRIVATE_KEY = f"-----END {RSA_PRIVATE_KEY}-----"
+BEGIN_PUBLIC_KEY = f"-----BEGIN {RSA_PUBLIC_KEY}-----"
+END_PUBLIC_KEY = f"-----END {RSA_PUBLIC_KEY}-----"
+CMD_INSERT = "1"
+CMD_GET_ROOT = "2"
+CMD_GET_PROOF = "3"
+CMD_VERIFY = "4"
+CMD_GENERATE_KEYS = "5"
+CMD_SIGN = "6"
+CMD_VERIFY_SIGNATURE = "7"
+MAX_PEM_LINES = 1000
+
+# Cryptographic functions
 def H(x):
     return hashlib.sha256(x).digest()
 
@@ -27,26 +44,48 @@ def gen():
     return sk_pem.decode(), pk_pem.decode()
 
 def verify_signature(pk_pem_str, sig_hex, data):
-    pk = serialization.load_pem_public_key(
-        pk_pem_str.encode(),
-        backend=default_backend()
-    )
-    sig = bytes.fromhex(sig_hex)
     try:
-        pk.verify(
-            sig,
-            bytes.fromhex(data),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
+        pk = serialization.load_pem_public_key(
+            pk_pem_str.encode(),
+            backend=default_backend()
         )
-        return True
-    except InvalidSignature:
+        sig = bytes.fromhex(sig_hex)
+        try:
+            pk.verify(
+                sig,
+                bytes.fromhex(data),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except InvalidSignature:
+            return False
+    except (ValueError, TypeError):
         return False
 
-class Mersplit_indexleTree:
+# Input/Output functions
+def read_pem_key(key_type, max_lines=MAX_PEM_LINES):
+    """Safely read a PEM key from input with line limit protection."""
+    pem_lines = []
+    end_marker = f"END {key_type}"
+    line_count = 0
+    
+    try:
+        while line_count < max_lines:
+            line = input().rstrip()
+            pem_lines.append(line)
+            line_count += 1
+            if end_marker in line and input() == "":
+                return "\n".join(pem_lines) + "\n"
+        # If we reach here, we've hit the max line limit without finding the end marker
+        return None
+    except Exception:
+        return None
+
+class MerkleTree:
     def __init__(self):
         self.leaves = []
         self.root_hash = b''
@@ -74,11 +113,6 @@ class Mersplit_indexleTree:
         right_hash = self._root_range(m, h)
         return H((left_hash.hex() + right_hash.hex()).encode())
 
-    def root(self):
-        if not self.leaves:
-            return b''
-        return self._root_range(0, len(self.leaves))
-
     def get_proof(self, index, l, h):
         length = h - l
         # base case: reached the leaf
@@ -93,133 +127,191 @@ class Mersplit_indexleTree:
             proof.append('1' + sib.hex())
         else:
             # leaf in right subtree: adjust index and append left sibling
-            proof = self.get_proof(index - split_index, m, h)
+            proof = self.get_proof(index, m, h)
             sib = self._root_range(l, m)
             proof.append('0' + sib.hex())
         return proof
 
     @staticmethod
     def verify(data, proof, root_bytes):
-        # recompute hash from leaf up
-        h = H(data.encode())
-        for item in proof:
-            bit = item[0]
-            sib = bytes.fromhex(item[1:])
-            if bit == '0':
-                concat_hex = sib.hex() + h.hex()
-            else:
-                concat_hex = h.hex() + sib.hex()
-            h = H(concat_hex.encode())
-        return h == root_bytes
+        try:
+            # recompute hash from leaf up
+            h = H(data.encode())
+            for i, item in enumerate(proof):
+                if not item or item[0] not in ('0', '1'):
+                    return False
+                try:
+                    bit = item[0]
+                    sib = bytes.fromhex(item[1:])
+                    if bit == '0':
+                        concat_hex = sib.hex() + h.hex()
+                    else:
+                        concat_hex = h.hex() + sib.hex()
+                    h = H(concat_hex.encode())
+                except (ValueError, IndexError) as e:
+                    return False
+            result = h == root_bytes
+            return result
+        except Exception as e:
+            return False
 
     def sign(self, sk_pem):
-        sk = serialization.load_pem_private_key(
-            sk_pem.encode(),
-            password=None,
-            backend=default_backend()
-        )
-        sig = sk.sign(
-            self.get_root(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
-        return sig
+        try:
+            sk = serialization.load_pem_private_key(
+                sk_pem.encode(),
+                password=None,
+                backend=default_backend()
+            )
+            sig = sk.sign(
+                self.get_root(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return sig
+        except Exception:
+            return None
+
+# Command handlers
+def handle_insert(tree, parts):
+    if len(parts) != 2:
+        return
+    data = parts[1]
+    tree.insert(data)
+    return
+
+def handle_get_root(tree):
+    if tree.get_leafs_cnt() == 0:
+        return ""
+    return tree.get_root().hex()
+
+def handle_get_proof(tree, parts):
+    if len(parts) != 2:
+        return ""
     
+    try:
+        idx = int(parts[1])
+        if idx < 0 or idx >= tree.get_leafs_cnt():
+            return ""
+        
+        root_hex = tree.get_root().hex()
+        proof = tree.get_proof(idx, 0, len(tree.leaves))
+        return root_hex + ' ' + ' '.join(proof)
+    except ValueError as e:
+        return ""
+
+def handle_verify(parts):
+    if len(parts) < 4:
+        return ""
+    
+    data = parts[1]
+    root_hex = parts[2]
+    proof_items = parts[3:]
+    
+    try:
+        root_bytes = bytes.fromhex(root_hex)
+        valid = MerkleTree.verify(data, proof_items, root_bytes)
+        return str(valid).capitalize()  # Output True/False with capital letter
+    except ValueError as e:
+        return "False"
+
+def handle_generate_keys():
+    sk_pem, pk_pem = gen()
+    return f"{sk_pem}\n{pk_pem}"
+
+def handle_sign(tree, parts):
+    if len(parts) < 2 or " ".join(parts[1:]) != BEGIN_PRIVATE_KEY.strip():
+        return ""
+        
+    sk_pem = read_pem_key(RSA_PRIVATE_KEY)
+    if not sk_pem:
+        return ""
+        
+    sk_pem = f"{BEGIN_PRIVATE_KEY}\n{sk_pem}"
+    
+    signature = tree.sign(sk_pem)
+    return signature.hex() if signature else ""
+
+def handle_verify_signature(parts):
+    if len(parts) < 2 or " ".join(parts[1:]) != BEGIN_PUBLIC_KEY.strip():
+        return ""
+        
+    pk_pem = read_pem_key(RSA_PUBLIC_KEY)
+    if not pk_pem:
+        return ""
+        
+    pk_pem = f"{BEGIN_PUBLIC_KEY}\n{pk_pem}"
+    
+    try:
+        # read the signature and the data safely
+        sig_data_line = input().rstrip()
+        sig_data = sig_data_line.split()
+        
+        if len(sig_data) < 2:
+            return "False"
+            
+        sig = sig_data[0]
+        data = sig_data[1]
+        
+        # verify the signature
+        result = verify_signature(pk_pem, sig, data)
+        return str(result).capitalize()
+    except Exception:
+        return "False"
+
 def main():
-    tree = Mersplit_indexleTree()
+    tree = MerkleTree()
     try:
         while True:
-            line = input().strip()
-            if not line:
-                continue
-            parts = line.split()
-            cmd = parts[0]
-            if cmd == '1':
-                # validate input - needs to be "1 <leaf>"
-                if len(parts) != 2:
+            try:
+                line = input().strip()
+                if not line:
                     print()
                     continue
-                # insert leaf
-                data = parts[1]
-                tree.insert(data)
-            elif cmd == '2':
-                # check input is valid
-                if len(parts) != 1:
-                    print()
-                    continue
-                # print root hash
-                print(tree.get_root().hex())
-            elif cmd == '3':
-                # check input is valid
-                if len(parts) != 2:
-                    print()
-                    continue
-                # print root and proof
-                idx = int(parts[1])
-                if idx < 0 or idx >= tree.get_leafs_cnt():
-                    print()
-                    continue
-                root_hex = tree.get_root().hex()
-                proof = tree.get_proof(idx, 0, len(tree.leaves))
-                print(root_hex + ' ' + ' '.join(proof))
-            elif cmd == '4':
-                # validate input - needs to be "4 <data> <root> <proof>"
-                if len(parts) < 4:
-                    print()
-                    continue
-                # verify data against provided root and proof
-                data = parts[1]
-                root_hex = parts[2]
-                proof_items = parts[3:]
-                valid = Mersplit_indexleTree.verify(data, proof_items, bytes.fromhex(root_hex))
-                print(str(valid))
-            elif cmd == '5':
-                # validate input
-                if len(parts) != 1:
-                    print()
-                    continue
-                sk_pem, pk_pem = gen()
-                print(sk_pem)
-                print(pk_pem)
-            elif cmd == '6':
-                # can we assume that the pem key is valid and wont contain a infinite loop?
-                # validate input
-                pem_lines = []
-                while True:
-                    l = input().rstrip()
-                    pem_lines.append(l)
-                    if 'END RSA PRIVATE KEY' in l:
-                        break
-                sk_pem = "\n".join(pem_lines) + "\n"
-                sk_pem = "-----BEGIN RSA PRIVATE KEY-----\n" + sk_pem
-                print(tree.sign(sk_pem).hex())
                 
-            elif cmd == '7':
-                # need to check if the infinte loop like before
-                # read input in format: 7 <pem> <sig> <data> and call the verifier
-                pem_lines = []
-                while True:
-                    l = input().rstrip()
-                    pem_lines.append(l)
-                    if 'END PUBLIC KEY' in l:
-                        break
-                pk_pem = "\n".join(pem_lines) + "\n"
-                pk_pem = "-----BEGIN PUBLIC KEY-----\n" + pk_pem
-                # read the addional new line from the pem
-                input()
-                # read the signature and the data(they are in the same line separated by space)
-                sig_data = input().rstrip().split()
-                sig = sig_data[0]
-                data = sig_data[1]
-                # verify the signature
-                print(verify_signature(pk_pem, sig, data))
-            
-            else:
-                print(f"[DEBUG] Unkown command: {cmd}")
-    except EOFError:
+                parts = line.split()
+                if not parts:
+                    print()
+                    continue
+                    
+                cmd = parts[0]
+                result = ""
+                
+                if cmd == CMD_INSERT:
+                    handle_insert(tree, parts)
+                
+                elif cmd == CMD_GET_ROOT:
+                    result = handle_get_root(tree)
+                    print(result)
+                
+                elif cmd == CMD_GET_PROOF:
+                    result = handle_get_proof(tree, parts)
+                    print(result)
+                
+                elif cmd == CMD_VERIFY:
+                    result = handle_verify(parts)
+                    print(result)
+                
+                elif cmd == CMD_GENERATE_KEYS:
+                    result = handle_generate_keys()
+                    print(result)
+                
+                elif cmd == CMD_SIGN:
+                    result = handle_sign(tree, parts)
+                    print(result)
+                
+                elif cmd == CMD_VERIFY_SIGNATURE:
+                    result = handle_verify_signature(parts)
+                    print(result)
+                
+                else:
+                    print()
+            except Exception:
+                print()
+                continue
+    except Exception:
         pass
 
 if __name__ == '__main__':
