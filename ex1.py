@@ -50,20 +50,17 @@ def verify_signature(pk_pem_str, sig_hex, data):
             backend=default_backend()
         )
         sig = bytes.fromhex(sig_hex)
-        try:
-            pk.verify(
-                sig,
-                bytes.fromhex(data),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
-            return True
-        except InvalidSignature:
-            return False
-    except (ValueError, TypeError):
+        pk.verify(
+            sig,
+            bytes.fromhex(data),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except Exception as e:
         return False
 
 # Input/Output functions
@@ -134,26 +131,22 @@ class MerkleTree:
 
     @staticmethod
     def verify(data, proof, root_bytes):
-        try:
+        # try:
             # recompute hash from leaf up
-            h = H(data.encode())
-            for i, item in enumerate(proof):
-                if not item or item[0] not in ('0', '1'):
-                    return False
-                try:
-                    bit = item[0]
-                    sib = bytes.fromhex(item[1:])
-                    if bit == '0':
-                        concat_hex = sib.hex() + h.hex()
-                    else:
-                        concat_hex = h.hex() + sib.hex()
-                    h = H(concat_hex.encode())
-                except (ValueError, IndexError) as e:
-                    return False
-            result = h == root_bytes
-            return result
-        except Exception as e:
-            return False
+        h = H(data.encode())
+        for item in proof:
+            if not item or item[0] not in ('0', '1'):
+                return False
+            bit = item[0]
+            sib = bytes.fromhex(item[1:])
+            if bit == '0':
+                concat_hex = sib.hex() + h.hex()
+            else:
+                concat_hex = h.hex() + sib.hex()
+            h = H(concat_hex.encode())
+        return h == root_bytes
+        # except Exception as e:
+        #     return False
 
     def sign(self, sk_pem):
         try:
@@ -180,11 +173,10 @@ def handle_insert(tree, parts):
         return
     data = parts[1]
     tree.insert(data)
-    return
 
 def handle_get_root(tree):
-    if tree.get_leafs_cnt() == 0:
-        return ""
+    # if tree.get_leafs_cnt() == 0:
+    #     return ""
     return tree.get_root().hex()
 
 def handle_get_proof(tree, parts):
@@ -197,27 +189,24 @@ def handle_get_proof(tree, parts):
             return ""
         
         root_hex = tree.get_root().hex()
-        proof = tree.get_proof(idx, 0, len(tree.leaves))
+        proof = tree.get_proof(idx, 0, tree.get_leafs_cnt())
         return root_hex + ' ' + ' '.join(proof)
     except ValueError as e:
         return ""
 
 def handle_verify(parts):
-    if len(parts) < 4:
+    if len(parts) < 3:
         return ""
-    
     data = parts[1]
     root_hex = parts[2]
-    proof_items = parts[3:]
-    
-    try:
-        root_bytes = bytes.fromhex(root_hex)
-        valid = MerkleTree.verify(data, proof_items, root_bytes)
-        return str(valid).capitalize()  # Output True/False with capital letter
-    except ValueError as e:
-        return "False"
+    proof_items = parts[3:] if len(parts) > 3 else []
+    root_bytes = bytes.fromhex(root_hex)
+    return MerkleTree.verify(data, proof_items, root_bytes)
 
-def handle_generate_keys():
+
+def handle_generate_keys(parts):
+    if len(parts) != 1:
+        return ""
     sk_pem, pk_pem = gen()
     return f"{sk_pem}\n{pk_pem}"
 
@@ -244,75 +233,63 @@ def handle_verify_signature(parts):
         
     pk_pem = f"{BEGIN_PUBLIC_KEY}\n{pk_pem}"
     
-    try:
-        # read the signature and the data safely
-        sig_data_line = input().rstrip()
-        sig_data = sig_data_line.split()
+    # read the signature and the data safely
+    sig_data_line = input().rstrip()
+    sig_data = sig_data_line.split()
+    
+    if len(sig_data) != 2:
+        return False
         
-        if len(sig_data) < 2:
-            return "False"
-            
-        sig = sig_data[0]
-        data = sig_data[1]
-        
-        # verify the signature
-        result = verify_signature(pk_pem, sig, data)
-        return str(result).capitalize()
-    except Exception:
-        return "False"
+    sig = sig_data[0]
+    data = sig_data[1]
+    
+    # verify the signature
+    return verify_signature(pk_pem, sig, data)
+
 
 def main():
     tree = MerkleTree()
-    try:
-        while True:
-            try:
-                line = input().strip()
-                if not line:
-                    print()
-                    continue
-                
-                parts = line.split()
-                if not parts:
-                    print()
-                    continue
-                    
-                cmd = parts[0]
-                result = ""
-                
-                if cmd == CMD_INSERT:
-                    handle_insert(tree, parts)
-                
-                elif cmd == CMD_GET_ROOT:
-                    result = handle_get_root(tree)
-                    print(result)
-                
-                elif cmd == CMD_GET_PROOF:
-                    result = handle_get_proof(tree, parts)
-                    print(result)
-                
-                elif cmd == CMD_VERIFY:
-                    result = handle_verify(parts)
-                    print(result)
-                
-                elif cmd == CMD_GENERATE_KEYS:
-                    result = handle_generate_keys()
-                    print(result)
-                
-                elif cmd == CMD_SIGN:
-                    result = handle_sign(tree, parts)
-                    print(result)
-                
-                elif cmd == CMD_VERIFY_SIGNATURE:
-                    result = handle_verify_signature(parts)
-                    print(result)
-                
-                else:
-                    print()
-            except Exception:
+    while True:
+        try:
+            line = input().strip()
+            if not line:
                 print()
                 continue
-    except Exception:
-        pass
+            
+            parts = line.split()
+            if not parts:
+                print()
+                continue
+                
+            cmd = parts[0]
+            
+            if cmd == CMD_INSERT:
+                handle_insert(tree, parts)
+            
+            elif cmd == CMD_GET_ROOT:
+                print(handle_get_root(tree))
+            
+            elif cmd == CMD_GET_PROOF:
+                print(handle_get_proof(tree, parts))
+            
+            elif cmd == CMD_VERIFY:
+                print(handle_verify(parts))
+            
+            elif cmd == CMD_GENERATE_KEYS:
+                print(handle_generate_keys(parts))
+            
+            elif cmd == CMD_SIGN:
+                print(handle_sign(tree, parts))
+            
+            elif cmd == CMD_VERIFY_SIGNATURE:
+                print(handle_verify_signature(parts))
+            
+            else:
+                print()
+        except Exception:
+            print()
+            continue
+
 
 if __name__ == '__main__':
     main()
