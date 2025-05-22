@@ -22,6 +22,7 @@ def H(x):
     return hashlib.sha256(x).digest()
 
 def gen():
+    # Generate RSA keys
     sk = rsa.generate_private_key(
         public_exponent=65537,
         key_size=2048,
@@ -40,6 +41,7 @@ def gen():
     return sk_pem.decode(), pk_pem.decode()
 
 def get_pem_key(begin_marker, end_marker, max_lines=MAX_PEM_LINES):
+    # function to read PEM key from input with a limit of lines
     lines = [begin_marker]
     for _ in range(max_lines):
         try:
@@ -52,6 +54,7 @@ def get_pem_key(begin_marker, end_marker, max_lines=MAX_PEM_LINES):
     return None
 
 def verify_signature(pk_pem_str, sig, data_str):
+    # verify the signature using the public key if cannot verify return False
     try:
         pk = serialization.load_pem_public_key(
             pk_pem_str.encode(),
@@ -87,25 +90,32 @@ class MerkelTree:
 
     def _root_range(self, l, h):
         length = h - l
+        # base case if only one leaf
         if length == 1:
             return H(self.leaves[l])
+        # find the split index
         split_index = 1 << ((length - 1).bit_length() - 1)
         m = l + split_index
+        # recursively calculate the hashes of the left and right subtrees
         left_hash = self._root_range(l, m)
         right_hash = self._root_range(m, h)
         return H((left_hash.hex() + right_hash.hex()).encode())
 
     def get_proof(self, index, l, h):
         length = h - l
+        # base case if only one leaf
         if length == 1:
             return []
+        # find the split index
         split_index = 1 << ((length - 1).bit_length() - 1)
         m = l + split_index
         if index < m:
+            # in case that the index is in the left subtree
             proof = self.get_proof(index, l, m)
             sib = self._root_range(m, h)
             proof.append('1' + sib.hex())
         else:
+            # in case that the index is in the right subtree
             proof = self.get_proof(index, m, h)
             sib = self._root_range(l, m)
             proof.append('0' + sib.hex())
@@ -113,6 +123,7 @@ class MerkelTree:
 
     @staticmethod
     def verify(data, proof, root_bytes):
+        # static method to verify the proof of inclusion
         try:
             h = H(data.encode())
             for item in proof:
@@ -125,6 +136,7 @@ class MerkelTree:
             return False
 
     def sign(self, sk_pem):
+        # sign the root hash with the private key
         try:
             sk = serialization.load_pem_private_key(
                 sk_pem.encode(),
@@ -143,6 +155,7 @@ class MerkelTree:
             return False
 
 def validate_cmd(parts, tree):
+    # function to validate the command if isnt valid return False
     if not parts:
         return False
     cmd = parts[0]
@@ -176,6 +189,7 @@ def main():
                 continue
             parts = line.split()
             if not validate_cmd(parts, tree):
+                # skip invalid command
                 print()
                 continue
 
