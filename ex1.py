@@ -46,7 +46,7 @@ def verify_signature(pk_pem_str, sig_hex, data):
     except InvalidSignature:
         return False
 
-class Mersplit_indexleTree:
+class MerkelTree:
     def __init__(self):
         self.leaves = []
         self.root_hash = b''
@@ -124,7 +124,7 @@ class Mersplit_indexleTree:
         return sig
     
 def main():
-    tree = Mersplit_indexleTree()
+    tree = MerkelTree()
     try:
         while True:
             line = input().strip()
@@ -169,7 +169,7 @@ def main():
                 data = parts[1]
                 root_hex = parts[2]
                 proof_items = parts[3:]
-                valid = Mersplit_indexleTree.verify(data, proof_items, bytes.fromhex(root_hex))
+                valid = MerkelTree.verify(data, proof_items, bytes.fromhex(root_hex))
                 print(str(valid))
             elif cmd == '5':
                 # validate input
