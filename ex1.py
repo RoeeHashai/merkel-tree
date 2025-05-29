@@ -217,11 +217,11 @@ def main():
     try:
         while True:
             line = input().strip()
-            if not line:
+            if not line or '  ' in line:
+                print()
                 continue
             parts = line.split()
             if not validate_cmd(parts, tree):
-                # skip invalid command
                 print()
                 continue
 
