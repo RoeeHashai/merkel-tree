@@ -46,6 +46,9 @@ def get_pem_key(begin_marker, end_marker, max_lines=MAX_PEM_LINES):
     for _ in range(max_lines):
         try:
             line = input().rstrip()
+            # verify the line is valid - in base64 format
+            if line != end_marker and not is_valid_base64(line):
+                return None        
         except EOFError:
             break
         lines.append(line)
@@ -152,7 +155,7 @@ class MerkelTree:
                 hashes.SHA256()
             )
         except Exception as e:
-            return False
+            return None
 
 def validate_cmd(parts, tree):
     # function to validate the command if isnt valid return False
@@ -171,6 +174,11 @@ def validate_cmd(parts, tree):
     if cmd == CMD_VERIFY:
         if len(parts) < 3:
             return False
+        if not is_valid_hex(parts[2]) or len(parts[2]) != 64:
+            return False
+        for item in parts[3:]:
+            if not is_valid_proof(item):
+                return False
         return True
     if cmd == CMD_GEN_KEYS:
         return len(parts) == 1
@@ -188,12 +196,21 @@ def is_valid_hex(hex_str):
     return True
 
 def is_valid_proof(proof):
+    if isinstance(proof, str):
+        proof = [proof]
     for item in proof:
         if item[0] not in ('0', '1'):
             return False
         if not is_valid_hex(item[1:]) or len(item[1:]) != 64:
             return False
     return True
+
+def is_valid_base64(b64_str):
+    try:
+        base64.b64decode(b64_str, validate=True)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 def main():
     tree = MerkelTree()
@@ -216,22 +233,14 @@ def main():
                 print(tree.get_root().hex())
 
             elif cmd == CMD_PROOF:
-                idx = int(parts[1])
                 root_hex = tree.get_root().hex()
-                proof = tree.get_proof(idx, 0, tree.get_leafs_cnt())
+                proof = tree.get_proof(int(parts[1]), 0, tree.get_leafs_cnt())
                 print(root_hex, *proof)
 
             elif cmd == CMD_VERIFY:
                 data = parts[1]
-                try:
-                    root_bytes = bytes.fromhex(parts[2])
-                except ValueError:
-                    print()
-                    continue
+                root_bytes = bytes.fromhex(parts[2])
                 proof_items = parts[3:]
-                if not is_valid_proof(proof_items):
-                    print()
-                    continue
                 print(MerkelTree.verify(data, proof_items, root_bytes))
                 
             elif cmd == CMD_GEN_KEYS:
@@ -246,7 +255,7 @@ def main():
                     continue
                 _ = input()  # skip blank line
                 sig = tree.sign(sk_pem)
-                if sig is False:
+                if not sig:
                     print()
                 else:
                     print(base64.b64encode(sig).decode())
@@ -262,11 +271,10 @@ def main():
                     print()
                     continue
                 sig_b64, data_str = sig_data
-                try:
-                    sig_bytes = base64.b64decode(sig_b64)
-                except (ValueError, base64.binascii.Error):
+                if not is_valid_base64(sig_b64) or not is_valid_hex(data_str) or len(data_str) != 64:
                     print()
                     continue
+                sig_bytes = base64.b64decode(sig_b64)
                 print(verify_signature(pk_pem, sig_bytes, data_str))
             else:
                 print()
