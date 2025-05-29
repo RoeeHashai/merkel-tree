@@ -219,6 +219,34 @@ class Ex1CLITests(unittest.TestCase):
         expected = ["", "", "", ""]
         self.assertEqual(out, expected)
 
+    def test_multiple_spaces_invalid(self):
+        """Test that commands with more than one space between command and arguments are invalid."""
+        # Build a small tree first
+        build = ["1 a", "1 b", "1 c"]
+        
+        # Test various commands with multiple spaces - all should return empty string
+        invalid_cmds = [
+            "1  data",          # insert with 2 spaces
+            "1   data",         # insert with 3 spaces
+            "3  0",             # proof with 2 spaces
+            "3    1",           # proof with 4 spaces
+            "4  a b c",         # verify with 2 spaces at start
+            "6  -----BEGIN",    # sign with 2 spaces
+            "7  -----BEGIN",    # verify signature with 2 spaces
+        ]
+        
+        # Run all invalid commands after building the tree
+        all_cmds = build + invalid_cmds
+        out = run_ex1(all_cmds)
+        
+        # First 3 outputs are from the build commands (empty since they're inserts)
+        # All invalid commands should produce empty output
+        expected_invalid_outputs = [""] * len(invalid_cmds)
+        actual_invalid_outputs = out
+        
+        self.assertEqual(actual_invalid_outputs, expected_invalid_outputs,
+                        "Commands with multiple spaces should return empty strings")
+
     def test_long_input_handled(self):
         long_str = "x" * 2048
         out = run_ex1([f"1 {long_str}", "2"])
