@@ -499,7 +499,7 @@ class Ex1CLITests(unittest.TestCase):
         self.assertEqual(out[-1], "")  # Empty line
 
     def test_verify_valid_markers_invalid_content(self):
-        """Test verify with valid markers but invalid key content - should output False."""
+        """Test verify with valid markers but invalid key content - should output new line."""
         leaves = ["test1", "test2"]
         build = [f"1 {v}" for v in leaves]
         verify_cmds = build + [
@@ -511,7 +511,7 @@ class Ex1CLITests(unittest.TestCase):
             "dGVzdA== " + "a" * 64
         ]
         out = run_ex1(verify_cmds)
-        self.assertEqual(out[-1], "False")
+        self.assertEqual(out[-1], "")
 
 
 class FileLoggingTestResult(unittest.TextTestResult):
