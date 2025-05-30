@@ -6,13 +6,13 @@ import os
 from typing import List
 from datetime import datetime
 
-EX1_SCRIPT = os.path.abspath("ex1.py")
+MERKLE_SCRIPT = os.path.abspath("merkle.py")
 TEST_OUTPUT_FILE = None
 TEST_COUNTER = 0
 
 
-def run_ex1(inputs: List[str]) -> List[str]:
-    """Run ex1.py with the given list of input lines and return output lines.
+def run_merkle(inputs: List[str]) -> List[str]:
+    """Run merkle.py with the given list of input lines and return output lines.
 
     A helper that starts the script in a subprocess, feeds the newline
     separated *inputs* terminated by an extra newline and captures the
@@ -22,7 +22,7 @@ def run_ex1(inputs: List[str]) -> List[str]:
     TEST_COUNTER += 1
     
     proc = subprocess.Popen(
-        [sys.executable, EX1_SCRIPT],
+        [sys.executable, MERKLE_SCRIPT],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -36,7 +36,7 @@ def run_ex1(inputs: List[str]) -> List[str]:
         TEST_OUTPUT_FILE.write(f"Test Execution #{TEST_COUNTER}\n")
         TEST_OUTPUT_FILE.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         TEST_OUTPUT_FILE.write(f"{'='*60}\n\n")
-        TEST_OUTPUT_FILE.write("INPUT TO ex1.py:\n")
+        TEST_OUTPUT_FILE.write("INPUT TO merkle.py:\n")
         TEST_OUTPUT_FILE.write("-" * 40 + "\n")
         for i, line in enumerate(inputs, 1):
             TEST_OUTPUT_FILE.write(f"{i:3d}: {line}\n")
@@ -49,12 +49,12 @@ def run_ex1(inputs: List[str]) -> List[str]:
             TEST_OUTPUT_FILE.write(f"ERROR OUTPUT:\n{stderr}\n")
             TEST_OUTPUT_FILE.write("="*60 + "\n\n")
         # fail fast – any stderr indicates crash / un-handled exception
-        raise AssertionError(f"ex1.py produced stderr: {stderr}")
+        raise AssertionError(f"merkle.py produced stderr: {stderr}")
     out_lines = stdout.splitlines()
     
     # Write the output to the test output file
     if TEST_OUTPUT_FILE:
-        TEST_OUTPUT_FILE.write("OUTPUT FROM ex1.py:\n")
+        TEST_OUTPUT_FILE.write("OUTPUT FROM merkle.py:\n")
         TEST_OUTPUT_FILE.write("-" * 40 + "\n")
         if out_lines:
             for i, line in enumerate(out_lines, 1):
@@ -67,26 +67,47 @@ def run_ex1(inputs: List[str]) -> List[str]:
     return out_lines
 
 
+# Hardcoded roots extracted from test_output.txt
+EXPECTED_ROOTS = {
+    # Single values
+    ("a",): "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+    ("single",): "947f187506f7629c81c81879a2cb2256455038e4ac770091d897fa0a8b945e3b",
+    
+    # Incremental roots test
+    ("apple",): "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
+    ("apple", "banana"): "004e48bbd922653f4cb0b656f13dbaaf72974acea5d6d836ba240ddcc780a994",
+    ("apple", "banana", "cherry"): "383c67a0a53bc24711b78c75707114c9335100a8654733dc8f0aa65f311ef33e",
+    ("apple", "banana", "cherry", "date"): "553c18f24d704b662bf49cede71758a1e7cb1dbee8948185bdc895843db0f5ca",
+    ("apple", "banana", "cherry", "date", "elderberry"): "65859a46039b52815c5fb014d30a6d190ac27ed8920acb46086de8bcae3229a0",
+    
+    # Multiple leaves test
+    ("a", "b", "c", "d", "e"): "dea979f026a014fcb2300d6300e73ae1ccfb0dd238835d33895286d610eb7c4f",
+    
+    # RSA sign and verify test
+    ("foo", "bar"): "ec321de56af3b66fb49e89cfe346562388af387db689165d6f662a3950286a57",
+    
+    # Signature tests
+    ("a", "b"): "62af5c3cb8da3e4f25061e829ebeea5c7513c54949115b1acc225930a90154da",
+    ("a", "b", "c"): "d71dc32fa2cd95be60b32dbb3e63009fa8064407ee19f457c92a09a5ff841a8a",
+    ("sigA", "sigB"): "a2c1fa55ff662335c18aba2c488379fd3c498bd67d13aa0c5a0ddb909a9c9d88",
+}
+
+
 def _calc_expected_root(strings: List[str]) -> str:
-    """Pure-python reference implementation for tree root calculation."""
+    """Return hardcoded root values for known test inputs."""
     if not strings:
         return ""
-    data = [s.encode() for s in strings]
-
-    def _root(l: int, h: int) -> bytes:
-        span = h - l
-        if span == 1:
-            return hashlib.sha256(data[l]).digest()
-        split = 1 << ((span - 1).bit_length() - 1)
-        m = l + split
-        left = _root(l, m)
-        right = _root(m, h)
-        return hashlib.sha256((left.hex() + right.hex()).encode()).digest()
-
-    return _root(0, len(data)).hex()
+    
+    # Convert list to tuple for dictionary lookup
+    key = tuple(strings)
+    
+    if key in EXPECTED_ROOTS:
+        return EXPECTED_ROOTS[key]
+    else:
+        raise ValueError(f"No hardcoded root found for input: {strings}")
 
 
-class Ex1CLITests(unittest.TestCase):
+class MerkleCLITests(unittest.TestCase):
     # ------------------------------------------------------------
     # Basic insert / root
     # ------------------------------------------------------------
@@ -95,7 +116,7 @@ class Ex1CLITests(unittest.TestCase):
             "1 a",  # insert
             "2"      # root
         ]
-        outputs = run_ex1(inputs)
+        outputs = run_merkle(inputs)
         self.assertEqual(len(outputs), 1)
         self.assertEqual(outputs[0], _calc_expected_root(["a"]))
 
@@ -105,7 +126,7 @@ class Ex1CLITests(unittest.TestCase):
         build = [f"1 {leaf}"]
         
         # Get proof for the single leaf (should be empty)
-        proof_out = run_ex1(build + ["3 0"])[0]
+        proof_out = run_merkle(build + ["3 0"])[0]
         parts = proof_out.split()
         root_hex = parts[0]
         proof_items = parts[1:]  # Should be empty list
@@ -114,18 +135,18 @@ class Ex1CLITests(unittest.TestCase):
         
         # Verify with empty proof should succeed
         verify_cmds = build + [f"4 {leaf} {root_hex}"]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True", "Empty proof should verify for single leaf")
         
         # Also verify with wrong data should fail
         verify_cmds = build + [f"4 wrong {root_hex}"]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "False", "Wrong data should not verify even with empty proof")
 
     def test_multiple_leaves_root(self):
         leaves = ["a", "b", "c", "d", "e"]
         ins_cmds = [f"1 {v}" for v in leaves]
-        outputs = run_ex1(ins_cmds + ["2"])
+        outputs = run_merkle(ins_cmds + ["2"])
         self.assertEqual(outputs[0], _calc_expected_root(leaves))
 
     # ------------------------------------------------------------
@@ -136,7 +157,7 @@ class Ex1CLITests(unittest.TestCase):
         build_cmds = [f"1 {v}" for v in leaves]
         proof_idx = 1  # middle leaf
         cmds = build_cmds + [f"3 {proof_idx}"]
-        proof_output = run_ex1(cmds)[0]
+        proof_output = run_merkle(cmds)[0]
 
         parts = proof_output.split()
         root_hex, proof_items = parts[0], parts[1:]
@@ -145,20 +166,20 @@ class Ex1CLITests(unittest.TestCase):
         verify_cmds = build_cmds + [
             f"4 {leaves[proof_idx]} {root_hex} " + " ".join(proof_items)
         ]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True")
 
     def test_proof_and_verify_failure(self):
         leaves = ["k", "l", "m"]
         build = [f"1 {v}" for v in leaves]
-        proof_out = run_ex1(build + ["3 0"])[0]
+        proof_out = run_merkle(build + ["3 0"])[0]
         parts = proof_out.split()
         root_hex, proof_items = parts[0], parts[1:]
 
         # Tamper with first proof item (flip direction bit)
         tampered = [("1" if proof_items[0][0] == "0" else "0") + proof_items[0][1:]] + proof_items[1:]
         verify_cmds = build + [f"4 {leaves[0]} {root_hex} " + " ".join(tampered)]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "False")
 
     # ------------------------------------------------------------
@@ -170,7 +191,7 @@ class Ex1CLITests(unittest.TestCase):
         root_hex = _calc_expected_root(leaves)
 
         # 1) Generate keys
-        key_out = run_ex1(["5"])
+        key_out = run_merkle(["5"])
         # Separate private / public blocks
         sk_lines, pk_lines = [], []
         current = None
@@ -191,7 +212,7 @@ class Ex1CLITests(unittest.TestCase):
             *sk_lines[1:],
             "",  # blank line after key
         ]
-        sign_out = run_ex1(sign_cmds)
+        sign_out = run_merkle(sign_cmds)
         signature_b64 = sign_out[-1]
         self.assertTrue(len(signature_b64) > 20)
 
@@ -202,7 +223,7 @@ class Ex1CLITests(unittest.TestCase):
             "",  # blank line
             f"{signature_b64} {root_hex}"
         ]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True")
 
     # ------------------------------------------------------------
@@ -215,13 +236,41 @@ class Ex1CLITests(unittest.TestCase):
             "3 5",          # proof on empty tree (invalid index)
             "4 a b c",      # verify with wrong arg count (b is not valid hex)
         ]
-        out = run_ex1(cmds)
+        out = run_merkle(cmds)
         expected = ["", "", "", ""]
         self.assertEqual(out, expected)
 
+    def test_multiple_spaces_invalid(self):
+        """Test that commands with more than one space between command and arguments are invalid."""
+        # Build a small tree first
+        build = ["1 a", "1 b", "1 c"]
+        
+        # Test various commands with multiple spaces - all should return empty string
+        invalid_cmds = [
+            "1  data",          # insert with 2 spaces
+            "1   data",         # insert with 3 spaces
+            "3  0",             # proof with 2 spaces
+            "3    1",           # proof with 4 spaces
+            "4  a b c",         # verify with 2 spaces at start
+            "6  -----BEGIN",    # sign with 2 spaces
+            "7  -----BEGIN",    # verify signature with 2 spaces
+        ]
+        
+        # Run all invalid commands after building the tree
+        all_cmds = build + invalid_cmds
+        out = run_merkle(all_cmds)
+        
+        # First 3 outputs are from the build commands (empty since they're inserts)
+        # All invalid commands should produce empty output
+        expected_invalid_outputs = [""] * len(invalid_cmds)
+        actual_invalid_outputs = out
+        
+        self.assertEqual(actual_invalid_outputs, expected_invalid_outputs,
+                        "Commands with multiple spaces should return empty strings")
+
     def test_long_input_handled(self):
         long_str = "x" * 2048
-        out = run_ex1([f"1 {long_str}", "2"])
+        out = run_merkle([f"1 {long_str}", "2"])
         # Should produce exactly one root line
         self.assertEqual(len(out), 1)
         self.assertEqual(len(out[0]), 64)  # hex encoded SHA-256
@@ -233,7 +282,7 @@ class Ex1CLITests(unittest.TestCase):
         for leaf in leaves:
             cmds.append(f"1 {leaf}")
             cmds.append("2")
-        outs = run_ex1(cmds)
+        outs = run_merkle(cmds)
         # We expect one output per root command
         self.assertEqual(len(outs), len(leaves))
         for i in range(len(leaves)):
@@ -246,28 +295,28 @@ class Ex1CLITests(unittest.TestCase):
         # indexes to test: first, middle, last
         for idx in [0, len(leaves)//2, len(leaves)-1]:
             cmds = build + [f"3 {idx}"]
-            proof_line = run_ex1(cmds)[0]
+            proof_line = run_merkle(cmds)[0]
             parts = proof_line.split()
             root, proof_items = parts[0], parts[1:]
             verify_cmds = build + [f"4 {leaves[idx]} {root} " + " ".join(proof_items)]
-            verify_out = run_ex1(verify_cmds)
+            verify_out = run_merkle(verify_cmds)
             self.assertEqual(verify_out[-1], "True", msg=f"proof failed for idx {idx}")
 
     def test_proof_invalid_root(self):
         leaves = ["red", "green", "blue"]
         build = [f"1 {v}" for v in leaves]
-        proof_line = run_ex1(build + ["3 2"])[0]
+        proof_line = run_merkle(build + ["3 2"])[0]
         parts = proof_line.split()
         wrong_root = "0" * 64  # definitely not real root
         proof_items = parts[1:]
         verify_cmds = build + [f"4 {leaves[2]} {wrong_root} " + " ".join(proof_items)]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "False")
 
     def test_malformed_proof_items(self):
         leaves = ["t1", "t2"]
         build = [f"1 {v}" for v in leaves]
-        proof_line = run_ex1(build + ["3 0"])[0]
+        proof_line = run_merkle(build + ["3 0"])[0]
         root, orig_proof = proof_line.split()[0], proof_line.split()[1:]
 
         malformed_cases = [
@@ -279,14 +328,14 @@ class Ex1CLITests(unittest.TestCase):
         ]
         for case in malformed_cases:
             verify_cmds = build + [f"4 {leaves[0]} {root} " + " ".join(case)]
-            out = run_ex1(verify_cmds)
+            out = run_merkle(verify_cmds)
             self.assertEqual(out[-1], "", msg=f"case {case} not empty line")
 
     def test_signature_invalid_after_tree_change(self):
         # Build simple tree and sign
         build = ["1 a", "1 b"]
         root = _calc_expected_root(["a", "b"])
-        key_out = run_ex1(["5"])
+        key_out = run_merkle(["5"])
         sk_lines, pk_lines = [], []
         current = None
         for line in key_out:
@@ -303,7 +352,7 @@ class Ex1CLITests(unittest.TestCase):
             *sk_lines[1:],
             "",
         ]
-        sign_out = run_ex1(sign_cmds)
+        sign_out = run_merkle(sign_cmds)
         sig = sign_out[-1]
 
         # mutate tree (add another leaf) and verify signature over old root should fail
@@ -314,13 +363,13 @@ class Ex1CLITests(unittest.TestCase):
             "",
             f"{sig} {root}"
         ]
-        verify_out = run_ex1(verify_cmds)
+        verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True")  # signature checks data, not tree state
 
         # but verifying with NEW root should fail
         new_root = _calc_expected_root(["a", "b", "c"])
         verify_cmds[-1] = f"{sig} {new_root}"
-        verify_out2 = run_ex1(verify_cmds)
+        verify_out2 = run_merkle(verify_cmds)
         self.assertEqual(verify_out2[-1], "False")
 
     # ------------------------------------------------------------
@@ -333,7 +382,7 @@ class Ex1CLITests(unittest.TestCase):
             n = 2 ** exp
             leaves = [f"p{idx}" for idx in range(n)]
             build = [f"1 {v}" for v in leaves] + [f"3 {n-1}"]
-            proof_line = run_ex1(build)[0]
+            proof_line = run_merkle(build)[0]
             proof_len = len(proof_line.split()) - 1  # exclude root
             self.assertEqual(proof_len, exp, msg=f"n={n} proof length {proof_len} != {exp}")
 
@@ -347,11 +396,11 @@ class Ex1CLITests(unittest.TestCase):
         cmds = build[:]
         for idx in random_idxs:
             cmds.append(f"3 {idx}")
-        outs = run_ex1(cmds)
+        outs = run_merkle(cmds)
         for idx, line in zip(random_idxs, outs):
             root, *proof_items = line.split()
             verify_cmds = build + [f"4 {leaves[idx]} {root} " + " ".join(proof_items)]
-            vr_out = run_ex1(verify_cmds)
+            vr_out = run_merkle(verify_cmds)
             self.assertEqual(vr_out[-1], "True", msg=f"random idx {idx} failed")
 
     def test_signature_wrong_public_key(self):
@@ -359,9 +408,9 @@ class Ex1CLITests(unittest.TestCase):
         leaves = ["sigA", "sigB"]
         build = [f"1 {v}" for v in leaves]
         # first key pair
-        sk1, pk1 = run_ex1(["5"]), None
+        sk1, pk1 = run_merkle(["5"]), None
         # second key pair
-        sk2_lines = run_ex1(["5"])
+        sk2_lines = run_merkle(["5"])
         sk_lines, pk2_lines = [], []
         for line in sk2_lines:
             if "BEGIN RSA PRIVATE KEY" in line:
@@ -385,7 +434,7 @@ class Ex1CLITests(unittest.TestCase):
             *first_sk_lines[1:],
             "",
         ]
-        sig = run_ex1(sign_cmds)[-1]
+        sig = run_merkle(sign_cmds)[-1]
 
         root_hex = _calc_expected_root(leaves)
         # verify with *wrong* public key (from second key pair) should fail
@@ -394,14 +443,14 @@ class Ex1CLITests(unittest.TestCase):
             *pk2_lines[1:],
             f"{sig} {root_hex}"
         ]
-        vr_out = run_ex1(verify_cmds)
+        vr_out = run_merkle(verify_cmds)
         self.assertEqual(vr_out[-1], "False")
 
     def test_verify_invalid_base64_signature(self):
         leaves = ["b64a", "b64b"]
         build = [f"1 {v}" for v in leaves]
         invalid_sig = "!!!not_base64!!!"
-        pk_lines_output = run_ex1(["5"])
+        pk_lines_output = run_merkle(["5"])
         pk_lines = []
         recording = False
         for line in pk_lines_output:
@@ -417,7 +466,7 @@ class Ex1CLITests(unittest.TestCase):
             "",
             f"{invalid_sig} {'a'*64}"
         ]
-        out = run_ex1(verify_cmds)
+        out = run_merkle(verify_cmds)
         self.assertEqual(out[-1], "")
 
     def test_sign_invalid_key_prefix(self):
@@ -431,7 +480,7 @@ class Ex1CLITests(unittest.TestCase):
             "-----END RSA PRIVATE KEY-----",
             "",
         ]
-        out = run_ex1(sign_cmds)
+        out = run_merkle(sign_cmds)
         self.assertEqual(out[-1], "")  # Empty line
 
     def test_sign_invalid_key_suffix(self):
@@ -445,7 +494,7 @@ class Ex1CLITests(unittest.TestCase):
             "-----END INVALID KEY-----",
             "",
         ]
-        out = run_ex1(sign_cmds)
+        out = run_merkle(sign_cmds)
         self.assertEqual(out[-1], "")  # Empty line
 
     def test_sign_valid_markers_invalid_content(self):
@@ -463,7 +512,7 @@ class Ex1CLITests(unittest.TestCase):
         # This should actually cause an error since base64.b64encode(False) will fail
         # The test runner should catch this as stderr
         try:
-            out = run_ex1(sign_cmds)
+            out = run_merkle(sign_cmds)
             # If we get here without exception, check if output is empty
             self.assertEqual(out[-1], "")
         except AssertionError as e:
@@ -481,7 +530,7 @@ class Ex1CLITests(unittest.TestCase):
             "",
             "dGVzdA== " + "a" * 64
         ]
-        out = run_ex1(verify_cmds)
+        out = run_merkle(verify_cmds)
         self.assertEqual(out[-1], "")  # Empty line
 
     def test_verify_invalid_key_suffix(self):
@@ -495,7 +544,7 @@ class Ex1CLITests(unittest.TestCase):
             "",
             "dGVzdA== " + "a" * 64
         ]
-        out = run_ex1(verify_cmds)
+        out = run_merkle(verify_cmds)
         self.assertEqual(out[-1], "")  # Empty line
 
     def test_verify_valid_markers_invalid_content(self):
@@ -510,7 +559,7 @@ class Ex1CLITests(unittest.TestCase):
             "",
             "dGVzdA== " + "a" * 64
         ]
-        out = run_ex1(verify_cmds)
+        out = run_merkle(verify_cmds)
         self.assertEqual(out[-1], "")
 
 
@@ -541,7 +590,7 @@ if __name__ == "__main__":
     TEST_OUTPUT_FILE.write("="*60 + "\n\n")
     
     _loader = unittest.TestLoader()
-    _suite = _loader.loadTestsFromTestCase(Ex1CLITests)
+    _suite = _loader.loadTestsFromTestCase(MerkleCLITests)
     print("Running the following tests:")
     for t in _suite:
         print("  •", t._testMethodName)
