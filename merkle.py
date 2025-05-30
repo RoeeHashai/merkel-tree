@@ -1,3 +1,41 @@
+import sys
+import builtins
+
+# Wrap stdout and stderr for logging output
+class TeeOutput:
+    def __init__(self, stream, filepath):
+        self.stream = stream
+        self.logfile = open(filepath, 'a')
+
+    def write(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+        self.logfile.write(data)
+        self.logfile.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.logfile.flush()
+
+    def __getattr__(self, attr):
+        return getattr(self.stream, attr)
+
+# Replace sys.stdout and sys.stderr
+sys.stdout = TeeOutput(sys.stdout, 'output.log')
+sys.stderr = TeeOutput(sys.stderr, 'output.log')
+
+# Wrap built-in input to log user input
+original_input = builtins.input
+input_log = open('input.log', 'a')
+
+def logged_input(prompt=''):
+    response = original_input(prompt)
+    input_log.write(response + '\n')
+    input_log.flush()
+    return response
+
+builtins.input = logged_input
+
 import hashlib
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
@@ -46,9 +84,6 @@ def get_pem_key(begin_marker, end_marker, max_lines=MAX_PEM_LINES):
     for _ in range(max_lines):
         try:
             line = input().rstrip()
-            # verify the line is valid - in base64 format
-            if line != end_marker and not is_valid_base64(line):
-                return None        
         except EOFError:
             break
         lines.append(line)
@@ -211,6 +246,26 @@ def is_valid_base64(b64_str):
         return True
     except (ValueError, TypeError):
         return False
+    
+def is_valid_pem(pem_str, is_private=False):
+    try:
+        if is_private:
+            # Load private key
+            serialization.load_pem_private_key(
+                pem_str.encode(),
+                password=None,
+                backend=default_backend()
+            )
+        else:
+            # Load public key
+            serialization.load_pem_public_key(
+                pem_str.encode(),
+                backend=default_backend()
+            )
+        return True
+    except Exception:
+        return False
+        
 
 def main():
     tree = MerkelTree()
@@ -250,7 +305,7 @@ def main():
 
             elif cmd == CMD_SIGN:
                 sk_pem = get_pem_key(BEGIN_RSA_PRIVATE_KEY, END_RSA_PRIVATE_KEY)
-                if not sk_pem:
+                if not sk_pem or not is_valid_pem(sk_pem, is_private=True):
                     print()
                     continue
                 _ = input()  # skip blank line
@@ -262,7 +317,7 @@ def main():
 
             elif cmd == CMD_CHECK_SIG:
                 pk_pem = get_pem_key(BEGIN_PUBLIC_KEY, END_PUBLIC_KEY)
-                if not pk_pem:
+                if not pk_pem or not is_valid_pem(pk_pem, is_private=False):
                     print()
                     continue
                 _ = input()  # skip blank line
