@@ -55,11 +55,11 @@ def get_pem_key(begin_marker, end_marker, max_lines=MAX_PEM_LINES):
 
 def verify_signature(pk_pem_str, sig, data_str):
     # verify the signature using the public key if cannot verify return False
+    pk = serialization.load_pem_public_key(
+        pk_pem_str.encode(),
+        backend=default_backend()
+    )
     try:
-        pk = serialization.load_pem_public_key(
-            pk_pem_str.encode(),
-            backend=default_backend()
-        )
         pk.verify(
             sig,
             bytes.fromhex(data_str),
@@ -137,22 +137,20 @@ class MerkelTree:
 
     def sign(self, sk_pem):
         # sign the root hash with the private key
-        try:
-            sk = serialization.load_pem_private_key(
-                sk_pem.encode(),
-                password=None,
-                backend=default_backend()
-            )
-            return sk.sign(
-                self.get_root(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
-        except Exception as e:
-            return None
+        sk = serialization.load_pem_private_key(
+            sk_pem.encode(),
+            password=None,
+            backend=default_backend()
+        )
+        return sk.sign(
+            self.get_root(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
 
 def validate_cmd(parts, tree):
     # function to validate the command if isnt valid return False
@@ -271,11 +269,7 @@ def main():
                     print()
                     continue
                 _ = input()  # skip blank line
-                sig = tree.sign(sk_pem)
-                if not sig:
-                    print()
-                else:
-                    print(base64.b64encode(sig).decode())
+                print(base64.b64encode(tree.sign(sk_pem)).decode())
 
             elif cmd == CMD_CHECK_SIG:
                 pk_pem = get_pem_key(BEGIN_PUBLIC_KEY, END_PUBLIC_KEY)
