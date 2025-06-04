@@ -221,7 +221,7 @@ class MerkleCLITests(unittest.TestCase):
             "7 " + pk_lines[0],
             *pk_lines[1:],
             "",  # blank line
-            f"{signature_b64}\n{root_hex}"
+            f"{signature_b64} {root_hex}"
         ]
         verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True")
@@ -361,14 +361,14 @@ class MerkleCLITests(unittest.TestCase):
             "7 " + pk_lines[0],
             *pk_lines[1:],
             "",
-            f"{sig}\n{root}"
+            f"{sig} {root}"
         ]
         verify_out = run_merkle(verify_cmds)
         self.assertEqual(verify_out[-1], "True")  # signature checks data, not tree state
 
         # but verifying with NEW root should fail
         new_root = _calc_expected_root(["a", "b", "c"])
-        verify_cmds[-1] = f"{sig}\n{new_root}"
+        verify_cmds[-1] = f"{sig} {new_root}"
         verify_out2 = run_merkle(verify_cmds)
         self.assertEqual(verify_out2[-1], "False")
 
@@ -441,7 +441,7 @@ class MerkleCLITests(unittest.TestCase):
         verify_cmds = build + [
             "7 " + pk2_lines[0],
             *pk2_lines[1:],
-            f"{sig}\n{root_hex}"
+            f"{sig} {root_hex}"
         ]
         vr_out = run_merkle(verify_cmds)
         self.assertEqual(vr_out[-1], "False")
