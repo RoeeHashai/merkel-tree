@@ -277,12 +277,12 @@ def main():
                     print()
                     continue
                 _ = input()  # skip blank line
-                sig_b64 = input().rstrip()
-                if not is_valid_base64(sig_b64):
+                sig_data = input().rstrip().split()
+                if len(sig_data) != 2:
                     print()
                     continue
-                data_str = input().rstrip()
-                if not is_valid_hex(data_str) or len(data_str) != 64:
+                sig_b64, data_str = sig_data
+                if not is_valid_base64(sig_b64) or not is_valid_hex(data_str) or len(data_str) != 64:
                     print()
                     continue
                 sig_bytes = base64.b64decode(sig_b64)
